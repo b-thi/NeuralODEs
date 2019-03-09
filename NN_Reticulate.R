@@ -59,10 +59,18 @@ if __name__ == "__main__":
   print(nn.output)
   exit
 
+# Output
 test = nn.output
+
+# Saving to csv
+test_frame = pd.DataFrame(test, columns=['Activations']) 
+test_frame.to_csv('activations.csv')
+
 ## EXITING PYTHON IN R
 exit #################
 ## EXITING PYTHON IN R
-nums = as.vector(py$test[0:3])
-str(py$test)
-plot(1:4, py$test)
+
+## Reading back saved code
+nums = read.csv("activations.csv", header = T)
+
+plot(1:4, nums$Activations)
