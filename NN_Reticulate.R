@@ -72,5 +72,5 @@ exit #################
 
 ## Reading back saved code
 nums = read.csv("activations.csv", header = T)
-
+py$test_frame
 plot(1:4, nums$Activations)
