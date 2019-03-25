@@ -1,0 +1,11 @@
+---
+title: "STAT 853 - Final Project"
+author: "Barinder Thind - 301193363"
+date: "March 24, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
