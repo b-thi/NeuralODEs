@@ -4,6 +4,8 @@
 library(reticulate)
 library(tidyverse)
 
+
+
 # Looking at python version
 py_config()
 

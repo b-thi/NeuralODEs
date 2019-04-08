@@ -19,7 +19,7 @@ This is the R Markdown file containing all my code for the STAT 853 final projec
 
 3) I present code on Residual Neural Networks. Here, the code was made using convolutional neural networks from Keras and Tensorflow packages with residual blocks. 
 
-4) Lastly, I present (incomplete) code on Neural ODEs. All code for this method is in Python. I have begun work on converting over this method to R in hopes of ultimately publishing a package. My code here is what I have done thus far. Plots in the final report come from a python jupyter notebook.
+4) Lastly, I present (incomplete) code on Neural ODEs. The first half of this section is -complete- python code that I sourced - essentially, I am going through what's underneath the hood along with an MNIST dataset implementation. In the second half of this section, I have begun work on converting over this method to R in hopes of ultimately publishing a package. My code here is what I have done thus far. Some of the plots in the final report come from a python jupyter notebook.
 
 
 ######################### SECTION 0 ##############################
@@ -37,6 +37,7 @@ library(keras)
 library(abind)
 library(kohonen)
 library(tidyr)
+library(tensorflow)
 ```
 
 
@@ -476,7 +477,6 @@ x <- train %>%
 y <- classvec2classmat(unlist(lapply(train, function(x) {x$is_iceberg})))
 ```
 
-
 ```{r}
 # Training Set list
 nums <- sample(1:1604, 1300)
@@ -529,8 +529,11 @@ iceberg_nn %>% compile(
   metrics = c('accuracy') # Looking at accuracy
 )
 
+## Summary of model
+summary(iceberg_nn)
+
 ## Fitting the model
-iceberg_nn %>% fit(train_iceberg, train_truth, epochs = 150)
+iceberg_nn %>% fit(train_iceberg, train_truth, epochs = 10)
 
 ## Seeing the accuracy
 score <- iceberg_nn %>% evaluate(test_iceberg, test_truth)
@@ -589,7 +592,7 @@ input_CNN = input_img_norm %>%
   layer_max_pooling_2d(c(2,2)) %>%
   layer_dropout(0.25) 
 
-## first residual
+## first residual layer
 input_CNN_residual = input_CNN %>%
   layer_batch_normalization(momentum = 0.99) %>%
   layer_conv_2d(128, kernel_size = kernel_size, padding = "same") %>%
@@ -600,9 +603,10 @@ input_CNN_residual = input_CNN %>%
   layer_batch_normalization(momentum = 0.99) %>%
   layer_activation_elu()
 
+# Here is the pass where the layers are put together with the previous activation
 input_CNN_residual = layer_add(list(input_CNN_residual,input_CNN))
 
-# ## second residual
+## second residual layer
 input_CNN_residual = input_CNN_residual %>%
   layer_batch_normalization(momentum = 0.99) %>%
   layer_conv_2d(128, kernel_size = kernel_size,padding = "same") %>%
@@ -613,6 +617,7 @@ input_CNN_residual = input_CNN_residual %>%
   layer_batch_normalization(momentum = 0.99) %>%
   layer_activation_elu()
 
+# Here is the pass where the layers are put together with the previous activation
 input_CNN_residual = layer_add(list(input_CNN_residual,input_CNN))
 
 ## final CNN
@@ -657,7 +662,7 @@ model_resNN %>% compile(optimizer = optimizer_adam(lr = 0.001),
 summary(model_resNN)
 
 ## Fitting the model
-model_resNN %>% fit(train_iceberg, train_truth, epochs = 150)
+model_resNN %>% fit(train_iceberg, train_truth, epochs = 10)
 
 ## Trying on test data
 predictions_resnet <-  mean(round(predict(model_resNN, test_iceberg))[,2] == test_truth[,2])
@@ -671,73 +676,32 @@ Here, middle convolutional layers are residual blocks.
 
 In this section, I begin working on Neural ODE's. I will go chunk by chunk and explain it in as much detail as possible. I will write pseudocode for the code chunks not yet completed. I will use lower case roman letters to distinguish between sections.
 
-SECTION IV.i - Relevant Packages
+Before doing any of that however, I will use the R Package Reticulate to demonstrate a python implementation and plot the loss results. This is a long chunk of code because Reticulate requires all code be in a single chunk - it won't hold memory from one chunk to another. I try my best to comment each section. Mind you, this is essentially source code for the original paper (i.e. it's not written by me - essentially, it's like rewriting the source code for a ggplot or dplyr package or something like that). I do my best to comment every section in the code in as much detail as possible. I always pull out the final results and code them in R. The --- dashed lines encompass this python section. I will include a separate document hoping to explain some errors if you run into them.
 
-Here, I load some relevant libraries for Neural ODE's. Note: I repeat some of the ones from before for the purpose of completeness. 
+EDIT: THIS CODE IS IN A SEPARATE RMD FILE. I was running into GPU issues trying to compile this along with the other code (keras in R). I was able to compile the code contained within the dashed lines in a separate .rmd file. I will be emailing both HTML files and both .rmd files!
 
-```{r}
-library(tidyverse)
-library(keras)
-library(tensorflow)
+--------------------------------------------------------------------
+
+ First, I load reticulate (I did this earlier but doing it again for completion purposes)
+
+```{r, eval = FALSE}
 library(reticulate)
+use_virtualenv("r-reticulate")
+py_available(TRUE)
 ```
 
-```{python}
+Here we go with the python code. 
 
-```
+```{python, eval = FALSE}
+# Here, first loaded are some dependencies
+# These libraries range from the deep learning architectures
+# required for the neural ODE to work (such as torch) and
+# more essential libraries like math and numpy for
+# ODE and array operations; the matplotlab library is for graphics
+# purposes and the pandas library is for data frame manipulation
+# Cude allows access to GPU use
 
-
-SECTION IV.ii - ODESolver
-
-Here, I develop the "black-box" ODE solver. For simplicity purposes, I will limit myself to Euler's method but with an adjustable step size (thus separating it from ResNets)
-
-```{r}
-ode_solve <- function(z0, t0, t1, f) {
-  
-  # Step Size Choice:
-  h_max = 0.05
-  n_steps = ceiling((abs(t1 - t0)/h_max))
-  
-  # Initializing
-  h = (t1 - t0)/n_steps
-  t = t0
-  z = z0
-  
-  # Running algorithm
-  for (i in 1:n_steps) {
-    z = z + h*f(z, t)
-    t = t + h
-  }
-  
-  # Returning
-  return(z)
-  
-}
-```
-
-Now, let's test the function to see if it's working correctly.
-
-```{r}
-# Setting up function
-a <- function(z, t){
-  b = z
-  return(b)
-}
-
-ode_solve(1, 1, 5, a)
-```
-
-This result matches the Python result - we can move on!
-
-SECTION IV.iii - Adjoint Method
-
-SECTION IV.iv - Augmented Dynamics
-
-SECTION IV.v - Forward Pass
-
-First, I define the forward method with torch autograd:
-
-```{python}
+##############
 import math
 import numpy as np
 from IPython.display import clear_output
@@ -749,6 +713,7 @@ import seaborn as sns
 sns.color_palette("bright")
 import matplotlib as mpl
 import matplotlib.cm as cm
+import pandas as pd
 
 import torch
 from torch import Tensor
@@ -756,9 +721,17 @@ from torch import nn
 from torch.nn  import functional as F 
 from torch.autograd import Variable
 
-use_cuda = torch.cuda.is_available()
+import torchvision
 
+use_cuda = torch.cuda.is_available() 
+##############
 
+# Next, here is the general ODE solve function we will use in the
+# forward pass later on. Euler's method is used here because it is
+# easy to implement - the step size is 0.05 (thus separating it
+# from ResNets)
+
+##############
 def ode_solve(z0, t0, t1, f):
     """
     Simplest Euler ODE initial value solver
@@ -774,7 +747,12 @@ def ode_solve(z0, t0, t1, f):
         z = z + h * f(z, t)
         t = t + h
     return z
+##############
 
+# This function computes the derivatives required in the
+# forward pass and reduces the number of parameters with the
+# flatten parameters function. Flattening lowers the "denseness"
+# of your model layer to layer - more on this in the final report
 class ODEF(nn.Module):
     def forward_with_grad(self, z, t, grad_outputs):
         """Compute f and a df/dz, a df/dp, a df/dt"""
@@ -802,7 +780,17 @@ class ODEF(nn.Module):
             p_shapes.append(p.size())
             flat_parameters.append(p.flatten())
         return torch.cat(flat_parameters)
+##############
 
+# Here, this is the adjoint call of the method. Remember, this is used
+# in the backward pass and this is defined here as well along with the
+# augmented dynamics. Moreover, the integrals in the backward trajectory
+# of the backpropagation process are computed over here. The exact
+# mathematical details of the "augmented" state, I am still trying to
+# work out. I have more in the final report but for now, take this to be
+# the funky source code that it is!
+
+##############
 class ODEAdjoint(torch.autograd.Function):
     @staticmethod
     def forward(ctx, z0, t, flat_parameters, func):
@@ -901,7 +889,15 @@ class ODEAdjoint(torch.autograd.Function):
             adj_z += dLdz_0
             adj_t[0] = adj_t[0] - dLdt_0
         return adj_z.view(bs, *z_shape), adj_t, adj_p, None
+##############
 
+# Next, the code is all bunched up nicely into a class NeuralODE
+# This means that the previous classes all act as dependencies for
+# this class. The previous classes will be called upon when this
+# code is run. There is not much else to say here other than
+# this is just a compacting of everything defined thus far
+
+##############
 class NeuralODE(nn.Module):
     def __init__(self, func):
         super(NeuralODE, self).__init__()
@@ -915,18 +911,39 @@ class NeuralODE(nn.Module):
             return z
         else:
             return z[-1]
-            
+##############
+
+# Here, we get batch normalization (defined in the final report)
+
+##############
 def norm(dim):
     return nn.BatchNorm2d(dim)
+##############
 
+# Next, we find a convolutional block. This is similar to the ResNet 
+# code. It's simply defining a convolutional Neural Net
+
+##############
 def conv3x3(in_feats, out_feats, stride=1):
     return nn.Conv2d(in_feats, out_feats, kernel_size=3, stride=stride, padding=1, bias=False)
+##############
 
+# Here, the code returns some relevant information about
+# the process thus far. The first line ppulls out the 
+# dimensions of the tensor image and the cat function
+# from torch simple puts together the results
+
+##############
 def add_time(in_tensor, t):
     bs, c, w, h = in_tensor.shape
     return torch.cat((in_tensor, t.expand(bs, 1, w, h)), dim=1)
-    
-    
+##############    
+
+# These next two classes embed a neural ODE into a convolutional
+# neural network. This is analgous to the Residual blocks being embedded
+# in the convolutional neural network in the ResNet Secion III. The
+# options for the convolutional blocks are similar to that of the 
+# R keras counterparts (number of neurons, kernel sizes, Relu activation, etc)
 class ConvODEF(ODEF):
     def __init__(self, dim):
         super(ConvODEF, self).__init__()
@@ -968,20 +985,24 @@ class ContinuousNeuralMNISTClassifier(nn.Module):
         x = x.view(-1, shape)
         out = self.fc(x)
         return out
-        
-        
+################     
+
+################  
 func = ConvODEF(64)
 ode = NeuralODE(func)
 model = ContinuousNeuralMNISTClassifier(ode)
 if use_cuda:
     model = model.cuda()
-    
-    
-import torchvision
+################      
 
+# Here, the MNIST training data is loaded and normalized
+# using the prespecified mean and standard deviation. This is
+# a standard pre-processing in most neural net implementations
+# as can be seen in my previous implementations
+
+################  v
 img_std = 0.3081
 img_mean = 0.1307
-
 
 batch_size = 32
 train_loader = torch.utils.data.DataLoader(
@@ -1001,13 +1022,24 @@ test_loader = torch.utils.data.DataLoader(
                                  torchvision.transforms.Normalize((img_mean,), (img_std,))
                              ])
     ),
-    batch_size=128, shuffle=True
+    batch_size=32, shuffle=True
 )
+################
 
+# Here the optimizer is defined
 
+################  
 optimizer = torch.optim.Adam(model.parameters())
+################  
 
+# Now, this is where the training is done and the functions
+# previously defined are called. The train and test functions
+# are for the separate outputs. The loss function is used 
+# here as well with the "criterion" function. This is a call to
+# cross-entropy function. The loss results are ultimately 
+# returned in the final outputs
 
+################  
 def train(epoch):
     num_items = 0
     train_losses = []
@@ -1048,16 +1080,117 @@ def test():
             num_items += data.shape[0]
     accuracy = accuracy * 100 / num_items
     print("Test Accuracy: {:.3f}%".format(accuracy))
-    
-n_epochs = 5
+################  
+
+# Next, here is some initialization and the number of epochs is defined
+
+################  
+n_epochs = 1
 test()
 train_losses = []
+################  
+
+# Finally, everything above is called and run
+
+################  
 for epoch in range(1, n_epochs + 1):
     train_losses += train(epoch)
     test()
+################  
+
+# The loss results are pulled out in the form of a CSV (using pandas)
+
+################  
+loss_data = pd.DataFrame({"loss": train_losses})
+loss_data["Trained_Images"] = loss_data.index * batch_size
+loss_data["Halflife_Loss"] = loss_data.loss.ewm(halflife=10).mean()
+loss_data.to_csv('neural_ode_loss.csv')
+################  
 ```
 
+
+
+```{r, evale = FALSE}
+# Reading in loss results from python
+neuralODELoss = read.csv("neural_ode_loss.csv", header = T)
+
+# Plotting
+neuralODELoss %>% 
+  ggplot(aes(x = Trained_Images, y = loss)) +
+  geom_line(color = "red", size = 1.1) +
+  theme_bw() +
+  labs(x = "Number of Images Trained\nEpoch = Batch Size * Iteration", y = "Cross-Entropy Loss") +
+  ggtitle("Neural ODE Training Loss") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+----------------------------------------------------------------
+
+Now, here is where I begin writing functions and what not for an R implementation - THIS SECTION IS INCOMPLETE! However, what I could do is there. I will look to continue to complete these over the next little while,
+
+SECTION IV.i - Relevant Packages
+
+Here, I load some relevant libraries for Neural ODE's. Note: I repeat some of the ones from before for the purpose of completeness. 
+
+```{r}
+library(tidyverse)
+library(keras)
+library(tensorflow)
+```
+
+SECTION IV.ii - ODESolver
+
+Here, I develop the "black-box" ODE solver. For simplicity purposes, I will limit myself to Euler's method but with an adjustable step size (thus separating it from ResNets)
+
+```{r}
+ode_solve <- function(z0, t0, t1, f) {
+  
+  # Step Size Choice:
+  h_max = 0.05
+  n_steps = ceiling((abs(t1 - t0)/h_max))
+  
+  # Initializing
+  h = (t1 - t0)/n_steps
+  t = t0
+  z = z0
+  
+  # Running algorithm
+  for (i in 1:n_steps) {
+    z = z + h*f(z, t)
+    t = t + h
+  }
+  
+  # Returning
+  return(z)
+  
+}
+```
+
+Now, let's test the function to see if it's working correctly.
+
+```{r}
+# Setting up function
+a <- function(z, t){
+  b = z
+  return(b)
+}
+
+ode_solve(1, 1, 5, a)
+```
+
+This result matches the Python result - we can move on!
+
+SECTION IV.iii - Adjoint Method
+
+SECTION IV.iv - Augmented Dynamics
+
+SECTION IV.v - Forward Pass
+
+First, I define the forward method with torch autograd:
+
+
 Now, let's take a look at the results
+
 
 SECTION IV.vi - Backward Pass
 
@@ -1080,10 +1213,10 @@ Here, I load the MNIST Data:
 
 ```{r}
 # First, I pull the general data sets from tensorflow
-datasets <- tf$contrib$learn$datasets
+#datasets <- tf$contrib$learn$datasets
 
 # Here, I pull specifically the mnist data
-mnist <- datasets$mnist$read_data_sets("MNIST-data", one_hot = TRUE)
+#mnist <- datasets$mnist$read_data_sets("MNIST-data", one_hot = TRUE)
 ```
 
 
