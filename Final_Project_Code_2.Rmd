@@ -21,6 +21,8 @@ This is the R Markdown file containing all my code for the STAT 853 final projec
 
 4) Lastly, I present (incomplete) code on Neural ODEs. The first half of this section is -complete- python code that I sourced - essentially, I am going through what's underneath the hood along with an MNIST dataset implementation. In the second half of this section, I have begun work on converting over this method to R in hopes of ultimately publishing a package. My code here is what I have done thus far. Some of the plots in the final report come from a python jupyter notebook.
 
+NOTE: The iterative error plots will not show up in the knit markdown files however, they will show up only during the run of the model. For example, the R keras recurrent neural network found in section 2, when that code chunk is run in a script, the loss plot renders as the code runs however, it doesn't get plotted in the markdown. This is true for the convolutional error plot as well.
+
 
 ######################### SECTION 0 ##############################
 
@@ -38,6 +40,7 @@ library(abind)
 library(kohonen)
 library(tidyr)
 library(tensorflow)
+require(gridExtra)
 ```
 
 
@@ -289,6 +292,60 @@ phase_data %>%
              nudge_y = -0.5)
 
 
+```
+
+Next, just for completeness, I present the following "error plot" - this is just random data, the goal of this plot was more just intuition:
+
+```{r}
+
+## Plotting
+ggplot(data = data.frame(x = 1:125, y = c(1/((1:70)), 1/((70)) + 0.0001*((1:55)^2))),
+       aes(x = x, y = y)) +
+  geom_line(size = 1.25, color = "red") +
+  theme_bw() +
+  labs(x = "Number of Layers", y = "Training Error Rate") + 
+  geom_line(data = data.frame(x = 1:125, y = c(1.1/((1:125)))),
+            aes(x = x, y = y), color = "blue", size = 1.25) +
+  ggtitle("Theoretical v. Actual Error Rates\n Plain Neural Network") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label(data = data.frame(x = 100, 
+                               y = 1,
+                               state = c("Blue Curve = Theoretical Error\nRed Curve = Error in Practice")),
+             aes(x = x, y = y, label = state),
+             nudge_y = -0.5)
+
+```
+
+Here's the code for the DE Activations vs. the ResNet Activations:
+
+```{r}
+## Plotting DE Layers
+x = seq(0, 3, 0.001)
+de_hidden <- data.frame(x = x, y = 1/(1 + exp(-x))) %>% 
+  ggplot(aes(x = x, y = y)) +
+  geom_line() +
+  theme_bw() +
+  labs(x = "t \n(depth)", y = "h(t)") +
+  ggtitle("Differential Equation Defining the \nHidden Activations for a Neural Network") +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+## Plotting recurrent NN Layers
+disc_hidden <- data.frame(x = x, y = 1/(1 + exp(-x))) %>% 
+  ggplot(aes(x = x, y = )) +
+  geom_segment(aes(x = 0, y = 0, xend = 1, yend = 0.75)) + 
+  geom_segment(aes(x = 1, y = 0.75, xend = 2, yend = 0.9)) +
+  geom_segment(aes(x = 2, y = 0.9, xend = 3, yend = 0.97)) +
+  theme_bw() +
+  labs(x = "t \n(depth)", y = "h(t)") +
+  ggtitle("Discrete Hidden Layers Defining the \nHidden Activations for a Neural Network") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_point(aes(x = 0, y = 0), color = "red", size = 2) +
+  geom_point(aes(x = 1, y = 0.75), color = "red", size = 2) +
+  geom_point(aes(x = 2, y = 0.9), color = "red", size = 2) +
+  geom_point(aes(x = 3, y = 0.97), color = "red", size = 2)
+
+## Plotting together
+grid.arrange(disc_hidden, de_hidden, ncol = 2)
 ```
 
 
@@ -1199,11 +1256,11 @@ SECTION IV.vii - Convolutional Code
 In this chunk of code, I define a batch normalization function, a convolution function, a time function, and the overall Neural ODE classifier
 
 ```{r}
-convODEF <- function(ODEF){
+#convODEF <- function(ODEF){
   
   # Initializing
-  conv1 = layer_conv_2d()
-}
+ # conv1 = layer_conv_2d()
+#}
 ```
 
 
